@@ -1,0 +1,29 @@
+{
+  "name": "nidaansetu",
+  "private": true,
+  "type": "module",
+  "description": "NidaanSetu - gaon ke mareez ko paas ke lab aur doctor se jodne wala platform (Siwan, Bihar)",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w client",
+    "lint": "eslint .",
+    "test": "npm test -w server",
+    "build": "npm run build -w client",
+    "e2e": "playwright test",
+    "create-admin": "npm run create-admin -w server --",
+    "seed:dev": "npm run seed:dev -w server"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.65.1",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0"
+  }
+}

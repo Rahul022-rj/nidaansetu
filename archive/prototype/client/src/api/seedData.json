@@ -1,0 +1,128 @@
+{
+  "villages": [
+    { "key": "rampur", "name": "Rampur", "block": "Maharajganj", "lat": 26.12, "lng": 84.495 },
+    { "key": "sonbarsa", "name": "Sonbarsa", "block": "Maharajganj", "lat": 26.135, "lng": 84.512 },
+    { "key": "bhagwanpur", "name": "Bhagwanpur", "block": "Maharajganj", "lat": 26.098, "lng": 84.52 },
+    { "key": "chainpur", "name": "Chainpur", "block": "Maharajganj", "lat": 26.15, "lng": 84.47 },
+    { "key": "mohammadpur", "name": "Mohammadpur", "block": "Maharajganj", "lat": 26.09, "lng": 84.48 },
+    { "key": "sarsar", "name": "Sarsar", "block": "Maharajganj", "lat": 26.17, "lng": 84.54 }
+  ],
+  "labs": [
+    {
+      "key": "shree",
+      "name": "Shree Pathology Lab (Demo)",
+      "block": "Maharajganj",
+      "address": "Main Bazaar, Maharajganj",
+      "phone": "9000000001",
+      "lat": 26.112,
+      "lng": 84.5,
+      "radiusKm": 6,
+      "collectionFee": 49,
+      "freeAbove": 499,
+      "pin": "1111",
+      "pathologist": "Dr. Demo (MD Pathology)",
+      "tests": [
+        { "name": "CBC", "price": 400 },
+        { "name": "Sugar Fasting", "price": 50 },
+        { "name": "Sugar PP", "price": 50 },
+        { "name": "HbA1c", "price": 550 },
+        { "name": "Thyroid (T3, T4, TSH)", "price": 600 },
+        { "name": "TSH", "price": 200 },
+        { "name": "Lipid Profile", "price": 650 },
+        { "name": "LFT (Liver)", "price": 800 },
+        { "name": "KFT (Kidney)", "price": 600 },
+        { "name": "Urine Routine", "price": 100 },
+        { "name": "Uric Acid", "price": 150 },
+        { "name": "Hb (Haemoglobin)", "price": 100 },
+        { "name": "Widal (Typhoid)", "price": 120 },
+        { "name": "Malaria", "price": 100 },
+        { "name": "Dengue NS1", "price": 1200 },
+        { "name": "Vitamin D", "price": 800 },
+        { "name": "ESR", "price": 150 },
+        { "name": "Blood Group", "price": 50 }
+      ]
+    },
+    {
+      "key": "jeevan",
+      "name": "Jeevan Diagnostic Centre (Demo)",
+      "block": "Maharajganj",
+      "address": "Station Road, Maharajganj",
+      "phone": "9000000002",
+      "lat": 26.14,
+      "lng": 84.49,
+      "radiusKm": 5,
+      "collectionFee": 49,
+      "freeAbove": 499,
+      "pin": "2222",
+      "pathologist": "Dr. Demo (MD Pathology)",
+      "tests": [
+        { "name": "CBC", "price": 350 },
+        { "name": "Sugar Fasting", "price": 60 },
+        { "name": "Sugar PP", "price": 60 },
+        { "name": "HbA1c", "price": 500 },
+        { "name": "Thyroid (T3, T4, TSH)", "price": 550 },
+        { "name": "Lipid Profile", "price": 600 },
+        { "name": "LFT (Liver)", "price": 700 },
+        { "name": "KFT (Kidney)", "price": 650 },
+        { "name": "Urine Routine", "price": 120 },
+        { "name": "Widal (Typhoid)", "price": 150 },
+        { "name": "Malaria", "price": 120 },
+        { "name": "Blood Group", "price": 60 }
+      ]
+    }
+  ],
+  "doctors": [
+    {
+      "key": "kumar",
+      "name": "Dr. A. Kumar (Demo)",
+      "degree": "MBBS",
+      "specialty": "General Physician",
+      "specialtyHi": "Aam bimari ke doctor",
+      "clinic": "Kumar Clinic, Main Bazaar",
+      "block": "Maharajganj",
+      "lat": 26.113,
+      "lng": 84.501,
+      "phone": "9000000011",
+      "days": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      "timing": "10:00 AM - 2:00 PM",
+      "fee": 300,
+      "pin": "3333"
+    },
+    {
+      "key": "devi",
+      "name": "Dr. S. Devi (Demo)",
+      "degree": "MBBS, MS",
+      "specialty": "Gynecologist",
+      "specialtyHi": "Mahila rog visheshagya",
+      "clinic": "Devi Nursing Home",
+      "block": "Maharajganj",
+      "lat": 26.118,
+      "lng": 84.497,
+      "phone": "9000000012",
+      "days": ["Tue", "Thu", "Sat"],
+      "timing": "11:00 AM - 3:00 PM",
+      "fee": 400,
+      "pin": "4444"
+    },
+    {
+      "key": "singh",
+      "name": "Dr. R. Singh (Demo)",
+      "degree": "MBBS, MD",
+      "specialty": "Child Specialist",
+      "specialtyHi": "Bachchon ke doctor",
+      "clinic": "Singh Child Care",
+      "block": "Maharajganj",
+      "lat": 26.142,
+      "lng": 84.488,
+      "phone": "9000000013",
+      "days": ["Mon", "Wed", "Fri", "Sun"],
+      "timing": "5:00 PM - 8:00 PM",
+      "fee": 350,
+      "pin": "5555"
+    }
+  ],
+  "admins": [
+    { "id": "admin", "name": "Ujjwal (Admin)", "role": "admin", "pin": "1234" },
+    { "id": "agent", "name": "Field Agent", "role": "agent", "pin": "0000" }
+  ]
+}
