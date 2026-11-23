@@ -9,3 +9,10 @@ mobile/build/
 mobile/.dart_tool/
 *.apk
 *.aab
+
+# Generated builds, storage, and test artifacts
+client/dist/
+server/storage/
+storage/
+test-results/
+.DS_Store
