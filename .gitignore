@@ -1,13 +1,11 @@
-node_modules/
-dist/
-coverage/
+# Environment & secrets
 .env
 .env.*
 !.env.example
-storage/
-server/storage/
-server/uploads/
-playwright-report/
-test-results/
-.DS_Store
-*.log
+
+# Node & Flutter build artifacts
+node_modules/
+mobile/build/
+mobile/.dart_tool/
+*.apk
+*.aab
