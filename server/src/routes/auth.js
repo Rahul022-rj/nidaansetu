@@ -18,6 +18,10 @@ import { sendMail, resetMail } from "../lib/mailer.js";
 import { audit } from "../lib/audit.js";
 import { badRequest, conflict, forbidden, unauthorized } from "../lib/errors.js";
 
+const isMobile = (req) => req.get("x-client") === "mobile";
+const readRefresh = (req) =>
+  req.cookies?.[REFRESH_COOKIE] || (isMobile(req) ? req.body?.refreshToken : undefined);
+
 const router = Router();
 
 export const passwordSchema = z
@@ -36,7 +40,9 @@ const getDummyHash = async () => (dummyHash ??= await hashPassword(randomToken(1
 async function startSession(req, res, user, status = 200) {
   const { raw } = await issueRefreshToken(user, req);
   res.cookie(REFRESH_COOKIE, raw, refreshCookieOptions());
-  res.status(status).json({ user: await meView(user), accessToken: signAccessToken(user) });
+  const body = { user: await meView(user), accessToken: signAccessToken(user) };
+  if (isMobile(req)) body.refreshToken = raw;
+  res.status(status).json(body);
 }
 
 export async function meView(user) {
@@ -94,7 +100,7 @@ router.post(
 );
 
 router.post("/refresh", async (req, res) => {
-  const raw = req.cookies?.[REFRESH_COOKIE];
+  const raw = readRefresh(req);
   const old = await rotateRefreshToken(raw);
   const user = await User.findById(old.user);
   if (!user || user.status !== "active") {
@@ -103,11 +109,13 @@ router.post("/refresh", async (req, res) => {
   }
   const { raw: next } = await issueRefreshToken(user, req, old.family);
   res.cookie(REFRESH_COOKIE, next, refreshCookieOptions());
-  res.json({ user: await meView(user), accessToken: signAccessToken(user) });
+  const body = { user: await meView(user), accessToken: signAccessToken(user) };
+  if (isMobile(req)) body.refreshToken = next;
+  res.json(body);
 });
 
 router.post("/logout", async (req, res) => {
-  await revokeRefreshToken(req.cookies?.[REFRESH_COOKIE]);
+  await revokeRefreshToken(readRefresh(req));
   res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions(), maxAge: undefined });
   res.json({ ok: true });
 });

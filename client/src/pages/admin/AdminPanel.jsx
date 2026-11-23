@@ -3,13 +3,14 @@ import { Icon } from "../../components/Icons.jsx";
 import { Link } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, post, patch, del, errorMessage, fieldErrors } from "../../api/client.js";
-import { useAuth } from "../../auth/AuthContext.jsx";
-import { Header, Badge, ErrorMsg, Field, Pager, QueryState, Stat, Tabs, TempPassword } from "../../components/ui.jsx";
+import { PanelShell, Badge, ErrorMsg, Field, Pager, QueryState, Stat, TempPassword } from "../../components/ui.jsx";
 import { rs, prettyDate, prettyDateTime, roleLabel } from "../../utils.js";
 
 const TABS = [
   { key: "dash", label: "Dashboard", icon: "chart" },
   { key: "finance", label: "Hisaab & commission", icon: "rupee" },
+  { key: "rules", label: "Rules & rates", icon: "shield" },
+  { key: "agents", label: "Agents", icon: "briefcase" },
   { key: "users", label: "Users", icon: "users" },
   { key: "labs", label: "Labs", icon: "flask" },
   { key: "doctors", label: "Doctors", icon: "steth" },
@@ -21,20 +22,24 @@ const TABS = [
 ];
 
 export default function AdminPanel() {
-  const { user } = useAuth();
   const [tab, setTab] = useState("dash");
   return (
-    <div className="app panel">
-      <Header title={user.name} subtitle="Super admin">
-        <Link className="chip-btn" to="/agent">
+    <PanelShell
+      role="Super admin"
+      tabs={TABS}
+      value={tab}
+      onChange={setTab}
+      actions={
+        <Link className="primary-btn small" to="/agent">
           <Icon name="plus" size={18} />
-          <span className="hide-sm">Lab/doctor jodein</span>
+          Lab/doctor jodein
         </Link>
-      </Header>
-      <main className="container">
-        <Tabs wrap tabs={TABS} value={tab} onChange={setTab} />
+      }
+    >
         {tab === "dash" && <Dashboard />}
         {tab === "finance" && <Finance />}
+        {tab === "rules" && <RulesRates />}
+        {tab === "agents" && <Agents />}
         {tab === "users" && <Users />}
         {tab === "labs" && <Labs />}
         {tab === "doctors" && <Doctors />}
@@ -43,8 +48,7 @@ export default function AdminPanel() {
         {tab === "appts" && <Appointments />}
         {tab === "settle" && <Settlements />}
         {tab === "audit" && <Audit />}
-      </main>
-    </div>
+    </PanelShell>
   );
 }
 
@@ -162,12 +166,16 @@ function Dashboard() {
   const q = useQuery({ queryKey: ["stats", days], queryFn: () => get("/admin/stats", { days }), refetchInterval: 60_000 });
   return (
     <>
-      <div className="pill-row">
-        {[7, 30, 90].map((d) => (
-          <button key={d} className={`pill ${days === d ? "on" : ""}`} onClick={() => setDays(d)}>
-            {d} din
-          </button>
-        ))}
+      <MoneyPanel />
+      <div className="row-between wrap dash-section-row">
+        <h2 className="dash-section">Kaam-kaaj (pichhle {days} din)</h2>
+        <div className="pill-row">
+          {[7, 30, 90].map((d) => (
+            <button key={d} className={`pill ${days === d ? "on" : ""}`} onClick={() => setDays(d)}>
+              {d} din
+            </button>
+          ))}
+        </div>
       </div>
       <QueryState query={q}>
         {(s) => (
@@ -226,6 +234,7 @@ const monthStart = () => {
   return `${d.slice(0, 8)}01`;
 };
 const todayIst = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+const daysAgoIst = (n) => new Date(Date.now() - n * 864e5 + 5.5 * 36e5).toISOString().slice(0, 10);
 const MODE_LABEL = { cash: "Cash (lab ne liya)", upi: "UPI (site pe)", online: "Online (site pe)" };
 
 // "+₹110 hum denge" / "₹340 lab dega" — the sign alone is too easy to misread.
@@ -284,32 +293,7 @@ function Finance() {
           const rows = d.data.filter((r) => !onlyActive || r.bookings > 0);
           return (
             <>
-              <div className="stat-row">
-                <Stat icon="file" label="Sample liye (bookings)" value={t.bookings} />
-                <Stat icon="rupee" tone="green" label="Kul kamai (GMV)" value={rs(t.gross)} />
-                <Stat icon="chart" tone="violet" label="Hamara commission" value={rs(t.commission)} />
-                <Stat icon="wallet" tone="amber" label="Labs ki kamai" value={rs(t.labEarning)} />
-                <Stat icon="briefcase" tone="rose" label="Cash labs ke paas" value={rs(t.cashCollected)} />
-                <Stat icon="globe" label="Site pe aaya (online)" value={rs(t.onlineCollected)} />
-              </div>
-
-              <div className="flow-grid">
-                <div className="card flow flow-get">
-                  <span className="flow-label">Labs se lena hai</span>
-                  <strong>{rs(t.labOwesUs)}</strong>
-                  <p className="muted small">Lab ne mareez se cash liya, usme se hamara commission.</p>
-                </div>
-                <div className="card flow flow-pay">
-                  <span className="flow-label">Labs ko dena hai</span>
-                  <strong>{rs(t.weOweLab)}</strong>
-                  <p className="muted small">Mareez ne site pe pay kiya, usme se lab ka hissa.</p>
-                </div>
-                <div className="card flow flow-net">
-                  <span className="flow-label">Net settlement (abhi baaki)</span>
-                  <Net value={t.pendingNet} big />
-                  <p className="muted small">Dono ka hisaab milakar. Paid settlement wali bookings hata kar.</p>
-                </div>
-              </div>
+              <MoneyOverview d={d} />
 
               <div className="card">
                 <div className="row-between">
@@ -378,6 +362,7 @@ function Finance() {
                   Sirf woh bookings ginti mein hain jinka sample is samay mein liya gaya (collected / report di). Settlement "Settlements" tab se paid mark karein.
                 </p>
               </div>
+              <TestProfit rows={d.byTest || []} collectionFees={t.collectionFees || 0} range={d.range} />
             </>
           );
         }}
@@ -458,6 +443,610 @@ function FinanceRow({ r, range, open, onToggle }) {
   );
 }
 
+function TestProfit({ rows, collectionFees, range }) {
+  const tot = rows.reduce((a, r) => ({ count: a.count + r.count, revenue: a.revenue + r.revenue, lab: a.lab + r.labShare, plat: a.plat + r.platformShare }), { count: 0, revenue: 0, lab: 0, plat: 0 });
+  return (
+    <div className="card">
+      <div className="row-between wrap">
+        <div>
+          <h3>Test-wise profit</h3>
+          <p className="muted small">Kis test se kitna bana. Rate wahi hai jo booking ke time fix hua tha.</p>
+        </div>
+        {rows.length > 0 && (
+          <button
+            className="secondary-btn small"
+            onClick={() =>
+              downloadCsv(`test_profit_${range.from}_${range.to}.csv`, [
+                ["Test", "Kitni baar", "Patient rate", "Mareez se aaya", "Lab ka hissa", "Platform ka hissa", "Margin %"],
+                ...rows.map((r) => [r.name, r.count, r.minRate === r.maxRate ? r.minRate : `${r.minRate}-${r.maxRate}`, r.revenue, r.labShare, r.platformShare, pct(r.platformShare, r.revenue)]),
+              ])
+            }
+          >
+            ⬇ Excel (CSV)
+          </button>
+        )}
+      </div>
+      {rows.length === 0 ? (
+        <p className="muted">Is samay mein koi test nahi hua.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Test</th>
+                <th className="num">Kitni baar</th>
+                <th className="num">Patient rate</th>
+                <th className="num">Mareez se aaya</th>
+                <th className="num">Lab ka hissa</th>
+                <th className="num">Platform ka hissa</th>
+                <th className="num">Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.name}>
+                  <td className="strong">{r.name}</td>
+                  <td className="num">{r.count}</td>
+                  <td className="num">{r.minRate === r.maxRate ? rs(r.minRate) : `${rs(r.minRate)}–${rs(r.maxRate)}`}</td>
+                  <td className="num">{rs(r.revenue)}</td>
+                  <td className="num">{rs(r.labShare)}</td>
+                  <td className="num strong profit">{rs(r.platformShare)}</td>
+                  <td className="num">
+                    <span className="margin-chip">{pct(r.platformShare, r.revenue)}%</span>
+                  </td>
+                </tr>
+              ))}
+              {collectionFees > 0 && (
+                <tr>
+                  <td className="strong">Home collection fee</td>
+                  <td className="num">–</td>
+                  <td className="num">–</td>
+                  <td className="num">{rs(collectionFees)}</td>
+                  <td className="num">{rs(0)}</td>
+                  <td className="num strong profit">{rs(collectionFees)}</td>
+                  <td className="num">
+                    <span className="margin-chip">100%</span>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th>Kul</th>
+                <th className="num">{tot.count}</th>
+                <th className="num"></th>
+                <th className="num">{rs(tot.revenue + collectionFees)}</th>
+                <th className="num">{rs(tot.lab)}</th>
+                <th className="num">{rs(tot.plat + collectionFees)}</th>
+                <th className="num">{pct(tot.plat + collectionFees, tot.revenue + collectionFees)}%</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const pct = (part, whole) => (whole ? Math.round((part / whole) * 1000) / 10 : 0);
+const splitAt = (amount, commission) => {
+  const lab = Math.round(amount * (1 - commission / 100));
+  return { lab, platform: amount - lab };
+};
+
+// ---------- rules & rates (super admin only) ----------
+// The written money rules + every lab's rate card, printable as a PDF for agreements with labs.
+function RulesRates() {
+  const q = useQuery({ queryKey: ["rateCard"], queryFn: () => get("/admin/rate-card") });
+  const [labId, setLabId] = useState("all");
+  const [amount, setAmount] = useState(1000);
+  const [commission, setCommission] = useState(30);
+
+  const printPdf = () => {
+    const old = document.title;
+    document.title = `NidaanSetu_Rules_and_Rates_${todayIst()}`;
+    window.print();
+    document.title = old;
+  };
+
+  return (
+    <QueryState query={q}>
+      {(d) => {
+        const labs = d.data;
+        const shown = labId === "all" ? labs : labs.filter((l) => l._id === labId);
+        const rates = [...new Set([30, ...labs.map((l) => l.commissionPercent)])].sort((a, b) => a - b);
+        const amt = Math.max(0, Number(amount) || 0);
+        const calc = splitAt(amt, Number(commission) || 0);
+        const def = labs[0] || { collectionFee: 49, freeCollectionAbove: 499, minOrderValue: 199 };
+        return (
+          <div className="rules">
+            <div className="card toolbar no-print">
+              <div>
+                <strong>Rules, commission aur rate card</strong>
+                <div className="muted small">Ye section sirf super admin dekh sakta hai. Labs ke saath agreement ke liye PDF download karein.</div>
+              </div>
+              <button className="primary-btn small" onClick={printPdf}>
+                <Icon name="file" size={18} /> PDF download karein
+              </button>
+            </div>
+
+            <article className="rules-doc">
+              <header className="doc-head">
+                <div>
+                  <h2>NidaanSetu: Paise ke niyam aur rate card</h2>
+                  <p className="muted small">Taiyaar kiya: {prettyDate(todayIst())} · Sirf andar ke istemaal ke liye (confidential)</p>
+                </div>
+              </header>
+
+              <section>
+                <h3>1. Paisa kaise batta hai</h3>
+                <div className="formula">
+                  <div>
+                    <span>Patient rate</span>
+                    <strong>Mareez jo deta hai</strong>
+                  </div>
+                  <span className="op">=</span>
+                  <div>
+                    <span>Lab ka hissa (B2B)</span>
+                    <strong>Rate × (100 − commission%)</strong>
+                  </div>
+                  <span className="op">+</span>
+                  <div className="hl">
+                    <span>Platform ka hissa</span>
+                    <strong>Rate × commission%</strong>
+                  </div>
+                </div>
+                <ol className="rule-list">
+                  <li>
+                    <b>Patient rate</b> = lab ka walk-in rate (jo lab counter pe leta hai). Mareez ko isse zyada kabhi nahi lagta.
+                  </li>
+                  <li>
+                    <b>Lab ka hissa</b> = rate × (100 − commission%), poore rupaye mein round. Kisi test pe agent/admin ne alag B2B rate rakha ho toh wahi lagta hai (rate card mein "custom" likha hai).
+                  </li>
+                  <li>
+                    <b>Platform ka hissa</b> = patient rate − lab ka hissa. Ye aapka profit hai.
+                  </li>
+                  <li>
+                    <b>Home collection fee</b> (abhi ₹{def.collectionFee}): jab tests ka total ₹{def.freeCollectionAbove} se kam ho. Ye fee <b>poori platform ki</b> hai, lab ka hissa isme nahi.
+                  </li>
+                  <li>
+                    <b>Minimum booking</b>: ₹{def.minOrderValue} se kam ki jaanch book nahi hoti.
+                  </li>
+                  <li>
+                    <b>Rate lock</b>: booking ke time jo rate tha wahi lagta hai. Baad mein rate badalne se purani booking ka hisaab nahi badalta.
+                  </li>
+                  <li>
+                    <b>Cancel booking</b> pe kisi ka koi paisa nahi banta.
+                  </li>
+                </ol>
+              </section>
+
+              <section>
+                <h3>2. Kaun kisko dega</h3>
+                <div className="two">
+                  <div className="card inset">
+                    <strong>Cash payment (lab ne mareez se liya)</strong>
+                    <p className="small">Poora paisa lab ke paas hai. <b>Lab platform ko uska hissa (commission + collection fee) dega.</b></p>
+                  </div>
+                  <div className="card inset">
+                    <strong>Online / UPI (site pe aaya)</strong>
+                    <p className="small">Poora paisa platform ke paas hai. <b>Platform lab ko uska hissa (B2B) dega.</b></p>
+                  </div>
+                </div>
+                <ol className="rule-list" start={8}>
+                  <li>
+                    <b>Settlement har hafte</b>: Somvaar subah 6 baje pichhle hafte ka hisaab apne aap banta hai. Final = lab ka hissa − lab ke paas aaya cash. Plus ho toh platform lab ko dega, minus ho toh lab platform ko dega.
+                  </li>
+                  <li>Payment ke baad admin UTR/reference daal ke settlement "paid" mark karega. Uske baad woh bookings dobara nahi gini jaati.</li>
+                  <li>Ginti sirf un bookings ki hoti hai jinka sample le liya gaya (collected / report di).</li>
+                </ol>
+              </section>
+
+              <section>
+                <h3>3. OTP ke niyam</h3>
+                <ol className="rule-list" start={11}>
+                  <li>Har booking ka OTP ek hi baar banta hai aur hamesha same rehta hai. Time se expire nahi hota.</li>
+                  <li>OTP sirf tab band hota hai jab booking cancel ho, sample le liya jaaye, ya 5 baar galat OTP daala jaaye (tab booking lock hoti hai).</li>
+                  <li>Doctor appointment ke receipt code pe bhi yahi niyam lagte hain.</li>
+                </ol>
+              </section>
+
+              <section>
+                <h3>4. Kitne rupaye ke test pe kitna kiska</h3>
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Test rate</th>
+                        {rates.map((c) => (
+                          <th key={c} className="num">
+                            {c}% commission
+                            <br />
+                            <span className="sub-th">lab / platform</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[100, 200, 300, 500, 800, 1000, 1500, 2000, 3000, 5000].map((a) => (
+                        <tr key={a}>
+                          <td className="strong">{rs(a)}</td>
+                          {rates.map((c) => {
+                            const x = splitAt(a, c);
+                            return (
+                              <td key={c} className="num">
+                                {rs(x.lab)} / <span className="profit strong">{rs(x.platform)}</span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="calc no-print">
+                  <strong>Calculator</strong>
+                  <label>
+                    Test rate ₹
+                    <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                  </label>
+                  <label>
+                    Commission %
+                    <input type="number" min="0" max="90" value={commission} onChange={(e) => setCommission(e.target.value)} />
+                  </label>
+                  <span>
+                    Lab ko <b>{rs(calc.lab)}</b> · Platform ko <b className="profit">{rs(calc.platform)}</b>
+                  </span>
+                </div>
+              </section>
+
+              <section>
+                <div className="row-between wrap">
+                  <h3>5. Har lab ka rate card</h3>
+                  <select className="no-print" value={labId} onChange={(e) => setLabId(e.target.value)} aria-label="Lab chunein">
+                    <option value="all">Sab labs</option>
+                    {labs.map((l) => (
+                      <option key={l._id} value={l._id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {shown.length === 0 && <p className="muted">Abhi koi chalu lab nahi hai.</p>}
+                {shown.map((l) => {
+                  const tot = l.tests.reduce((a, t) => ({ p: a.p + t.patientPrice, lab: a.lab + t.labShare, plat: a.plat + t.platformShare }), { p: 0, lab: 0, plat: 0 });
+                  return (
+                    <div key={l._id} className="lab-rate">
+                      <div className="lab-rate-head">
+                        <div>
+                          <strong>{l.name}</strong>
+                          <div className="muted small">
+                            {[l.block, l.phone].filter(Boolean).join(" · ")}
+                          </div>
+                        </div>
+                        <div className="chips">
+                          <span className="chip ref">{l.commissionPercent}% commission</span>
+                          <span className="chip">Collection fee ₹{l.collectionFee} (₹{l.freeCollectionAbove}+ pe free)</span>
+                          <span className="chip">Min ₹{l.minOrderValue}</span>
+                        </div>
+                      </div>
+                      {l.tests.length === 0 ? (
+                        <p className="muted small">Is lab ki rate list abhi khaali hai.</p>
+                      ) : (
+                        <div className="table-wrap">
+                          <table className="table">
+                            <thead>
+                              <tr>
+                                <th>Test</th>
+                                <th className="num">Patient rate</th>
+                                <th className="num">Lab ko</th>
+                                <th className="num">Platform ko</th>
+                                <th className="num">Margin</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {l.tests.map((t) => (
+                                <tr key={t._id}>
+                                  <td>
+                                    {t.name}
+                                    {t.custom && <span className="chip small-chip">custom</span>}
+                                  </td>
+                                  <td className="num">{rs(t.patientPrice)}</td>
+                                  <td className="num">{rs(t.labShare)}</td>
+                                  <td className="num strong profit">{rs(t.platformShare)}</td>
+                                  <td className="num">
+                                    <span className="margin-chip">{pct(t.platformShare, t.patientPrice)}%</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr>
+                                <th>{l.tests.length} test</th>
+                                <th className="num">{rs(tot.p)}</th>
+                                <th className="num">{rs(tot.lab)}</th>
+                                <th className="num">{rs(tot.plat)}</th>
+                                <th className="num">{pct(tot.plat, tot.p)}%</th>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+              <footer className="doc-foot muted small">NidaanSetu · Ye document system ke live rates se bana hai. Rate badalne pe naya PDF download karein.</footer>
+            </article>
+          </div>
+        );
+      }}
+    </QueryState>
+  );
+}
+
+// ---------- master money view ----------
+// Where the money came from, whose share is what, and per lab who pays whom.
+// Labs are never netted against each other: "to pay" and "to collect" stay separate.
+function MoneyOverview({ d, compact }) {
+  const t = d.totals;
+  const testMargin = t.commission - (t.collectionFees || 0);
+  const pay = d.data.filter((r) => r.pendingNet > 0).sort((a, b) => b.pendingNet - a.pendingNet);
+  const collect = d.data.filter((r) => r.pendingNet < 0).sort((a, b) => a.pendingNet - b.pendingNet);
+  const cashPct = t.gross ? Math.round((t.cashCollected / t.gross) * 100) : 0;
+  return (
+    <div className="money">
+      <div className="money-grid">
+        <div className="card money-card">
+          <span className="money-step">1</span>
+          <span className="flow-label">Paisa kahan aaya</span>
+          <strong className="money-big">{rs(t.gross)}</strong>
+          <p className="muted small">{t.bookings} sample · mareezon ne kul diya</p>
+          <div className="split-bar" aria-hidden="true">
+            <span className="seg-cash" style={{ flex: t.cashCollected || 0 }} />
+            <span className="seg-online" style={{ flex: t.onlineCollected || 0 }} />
+            {!t.gross && <span style={{ flex: 1 }} />}
+          </div>
+          <dl className="money-rows">
+            <div>
+              <dt>
+                <i className="dot-cash" /> Cash (labs ke paas)
+              </dt>
+              <dd>
+                {rs(t.cashCollected)} <small>{cashPct}%</small>
+              </dd>
+            </div>
+            <div>
+              <dt>
+                <i className="dot-online" /> Online (aapke account mein)
+              </dt>
+              <dd>
+                {rs(t.onlineCollected)} <small>{t.gross ? 100 - cashPct : 0}%</small>
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="card money-card">
+          <span className="money-step">2</span>
+          <span className="flow-label">Kiska kitna bana</span>
+          <strong className="money-big profit">{rs(t.commission)}</strong>
+          <p className="muted small">Aapka profit (platform ka hissa)</p>
+          <dl className="money-rows">
+            <div>
+              <dt>Test margin</dt>
+              <dd>{rs(testMargin)}</dd>
+            </div>
+            <div>
+              <dt>Home collection fee</dt>
+              <dd>{rs(t.collectionFees || 0)}</dd>
+            </div>
+            <div className="sep">
+              <dt>Labs ka hissa</dt>
+              <dd>{rs(t.labEarning)}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="card money-card money-settle">
+          <span className="money-step">3</span>
+          <span className="flow-label">Settlement (abhi baaki)</span>
+          <div className="settle-pair">
+            <div className="settle-out">
+              <small>Aapko labs ko dena hai</small>
+              <strong>{rs(t.payToLabs || 0)}</strong>
+              <span>{t.labsToPay || 0} lab</span>
+            </div>
+            <div className="settle-in">
+              <small>Labs se lena hai</small>
+              <strong>{rs(t.collectFromLabs || 0)}</strong>
+              <span>{t.labsToCollect || 0} lab</span>
+            </div>
+          </div>
+          <p className="small settle-note">Har lab ka alag hisaab hai. Ek lab ka lena doosre lab ke dene se kata nahi jaata.</p>
+        </div>
+      </div>
+
+      <div className="two who-lists">
+        <WhoList title="Inko paisa dena hai" tone="out" rows={pay} empty="Abhi kisi lab ko kuch nahi dena." />
+        <WhoList title="Inse paisa lena hai" tone="in" rows={collect} empty="Abhi kisi lab se kuch nahi lena." />
+      </div>
+
+      {!compact && (
+        <div className="card proof">
+          <span className="flow-label">Sab settle hone ke baad aapke paas bachega</span>
+          <div className="final-steps light">
+            <div>
+              <span>Online aaya</span>
+              <strong>{rs(t.onlineCollected)}</strong>
+            </div>
+            <span className="op">−</span>
+            <div>
+              <span>Online ka lab hissa (dena)</span>
+              <strong>{rs(t.weOweLab)}</strong>
+            </div>
+            <span className="op">+</span>
+            <div>
+              <span>Cash ka commission (lena)</span>
+              <strong>{rs(t.labOwesUs)}</strong>
+            </div>
+            <span className="op">=</span>
+            <div className="hl">
+              <span>Aapka profit</span>
+              <strong>{rs(t.onlineCollected - t.weOweLab + t.labOwesUs)}</strong>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WhoList({ title, tone, rows, empty }) {
+  const total = rows.reduce((s, r) => s + Math.abs(r.pendingNet), 0);
+  return (
+    <div className={`card who who-${tone}`}>
+      <div className="row-between">
+        <h3>{title}</h3>
+        <strong className="who-total">{rs(total)}</strong>
+      </div>
+      {rows.length === 0 ? (
+        <p className="muted small">{empty}</p>
+      ) : (
+        <ul className="who-rows">
+          {rows.map((r) => (
+            <li key={r.lab._id}>
+              <span className="avatar sm" aria-hidden="true">
+                {r.lab.name.slice(0, 1).toUpperCase()}
+              </span>
+              <div className="who-name">
+                <strong>{r.lab.name}</strong>
+                <small>
+                  {r.bookings} sample · cash {rs(r.cashCollected)} · online {rs(r.onlineCollected)}
+                  {r.lab.phone ? ` · ${r.lab.phone}` : ""}
+                </small>
+              </div>
+              <strong className="who-amt">{rs(Math.abs(r.pendingNet))}</strong>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// Money block on the main dashboard, with its own period.
+function MoneyPanel() {
+  const [range, setRange] = useState({ from: monthStart(), to: todayIst() });
+  const q = useQuery({ queryKey: ["finance", range], queryFn: () => get("/admin/finance", range), placeholderData: (p) => p, refetchInterval: 60_000 });
+  const presets = [
+    ["Is mahine", { from: monthStart(), to: todayIst() }],
+    ["Pichhle 7 din", { from: daysAgoIst(6), to: todayIst() }],
+    ["Pichhle 30 din", { from: daysAgoIst(29), to: todayIst() }],
+    ["Is saal", { from: `${todayIst().slice(0, 4)}-01-01`, to: todayIst() }],
+  ];
+  return (
+    <section>
+      <div className="row-between wrap dash-section-row">
+        <h2 className="dash-section">Paise ka poora hisaab</h2>
+        <div className="pill-row">
+          {presets.map(([label, r]) => (
+            <button key={label} className={`pill ${range.from === r.from && range.to === r.to ? "on" : ""}`} onClick={() => setRange(r)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <QueryState query={q}>{(d) => <MoneyOverview d={d} />}</QueryState>
+    </section>
+  );
+}
+
+// ---------- agents ----------
+function Agents() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["adminAgents"], queryFn: () => get("/admin/agents") });
+  const [temp, setTemp] = useState(null);
+  const [err, setErr] = useState("");
+  const refresh = () => qc.invalidateQueries({ queryKey: ["adminAgents"] });
+  async function toggle(u) {
+    setErr("");
+    try {
+      await patch(`/admin/users/${u._id}/status`, { status: u.status === "active" ? "disabled" : "active" });
+      refresh();
+    } catch (e) {
+      setErr(errorMessage(e));
+    }
+  }
+  async function reset(u) {
+    if (!window.confirm(`${u.name} ka password reset karein? Unhe naya temporary password dena hoga.`)) return;
+    try {
+      const r = await post(`/admin/users/${u._id}/reset-password`, {});
+      setTemp({ email: r.user.email || r.user.phone, password: r.tempPassword });
+      refresh();
+    } catch (e) {
+      setErr(errorMessage(e));
+    }
+  }
+  return (
+    <>
+      <CreateAgent startOpen onCreated={(t) => (setTemp(t), refresh())} />
+      <TempPassword email={temp?.email} password={temp?.password} />
+      <ErrorMsg msg={err} />
+      <QueryState query={q} isEmpty={(d) => d.data.length === 0} empty="Abhi koi agent nahi hai. Upar form se pehla agent banayein.">
+        {(d) => (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Login</th>
+                  <th className="num">Lab jode</th>
+                  <th className="num">Doctor jode</th>
+                  <th>Aakhri login</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {d.data.map((u) => (
+                  <tr key={u._id}>
+                    <td>
+                      <strong>{u.name}</strong>
+                      {u.mustChangePassword && <div className="chip">Temp password</div>}
+                    </td>
+                    <td>
+                      {u.email}
+                      {u.phone && <div className="muted small">{u.phone}</div>}
+                    </td>
+                    <td className="num strong">{u.labs}</td>
+                    <td className="num strong">{u.doctors}</td>
+                    <td>{prettyDateTime(u.lastLoginAt) || "—"}</td>
+                    <td>
+                      <Badge status={u.status} label={u.status} />
+                    </td>
+                    <td>
+                      <div className="btn-row">
+                        <button className="secondary-btn small" onClick={() => toggle(u)}>
+                          {u.status === "active" ? "Disable" : "Enable"}
+                        </button>
+                        <button className="link-btn" onClick={() => reset(u)}>
+                          Reset password
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </QueryState>
+    </>
+  );
+}
+
 // ---------- users ----------
 function Users() {
   const qc = useQueryClient();
@@ -491,7 +1080,6 @@ function Users() {
 
   return (
     <>
-      <CreateAgent onCreated={(t) => (setTemp(t), refresh())} />
       <TempPassword email={temp?.email} password={temp?.password} />
       <Filters>
         <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role">
@@ -565,8 +1153,8 @@ function Users() {
   );
 }
 
-function CreateAgent({ onCreated }) {
-  const [open, setOpen] = useState(false);
+function CreateAgent({ onCreated, startOpen = false }) {
+  const [open, setOpen] = useState(startOpen);
   const [f, setF] = useState({ name: "", email: "", phone: "" });
   const [errs, setErrs] = useState({});
   const [err, setErr] = useState("");
@@ -592,7 +1180,8 @@ function CreateAgent({ onCreated }) {
     );
   return (
     <form className="card form-card" onSubmit={submit} noValidate>
-      <h2>Naya field agent</h2>
+      <h2>Naya field agent jodein</h2>
+      <p className="muted small">Agent gaon, lab aur doctor ko platform pe jodta hai. Banane ke baad login ID aur temporary password yahin dikhega.</p>
       <div className="three">
         <Field label="Naam" error={errs.name}>
           <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
@@ -608,7 +1197,7 @@ function CreateAgent({ onCreated }) {
       <div className="btn-row">
         <button className="primary-btn small">Agent banayein</button>
         <button type="button" className="secondary-btn small" onClick={() => setOpen(false)}>
-          Rehne dein
+          Band karein
         </button>
       </div>
     </form>
