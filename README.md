@@ -1,13 +1,13 @@
 # NidaanSetu
 
-*Nidaan* (diagnosis) + *Setu* (bridge). NidaanSetu connects village patients in Siwan district (Bihar) with nearby pathology labs and doctors, so they don't have to travel to the market town.
+*Nidaan* (diagnosis) + *Setu* (bridge). NidaanSetu connects village patients in the Maharajganj block of Siwan district (Bihar) with nearby pathology labs and doctors, so they don't have to travel to the market town.
 
 - Patients book blood/urine tests. The partner lab's collector takes the sample at home (patient gives a 4-digit OTP) and uploads the report.
 - Patients see nearby doctors (days, timing, fee) and take a token number.
 - Doctors refer lab tests to a partner lab from inside the app.
 - The NidaanSetu team (super admin + field agents) onboards labs and doctors.
 
-**Stack:** MongoDB · Express 5 · React 19 (Vite) · Node 20+, with zod, JWT + rotating refresh cookies, TanStack Query, Jest + Supertest, Playwright.
+**Stack:** MongoDB · Express 5 · React 19 (Vite) · Node 20+ · Flutter (Riverpod + Dio), with zod, JWT + rotating refresh tokens, TanStack Query, Jest + Supertest, Playwright, Docker.
 
 ---
 
@@ -18,10 +18,13 @@ server/            API (npm workspace "nidaansetu-server")
   src/app.js         Express app (helmet, CORS, rate limits, routes)
   src/server.js      Boot: MongoDB, cron job, listen
   src/config/env.js  All configuration, validated with zod
-  src/models/        Mongoose models (User, Lab, LabTest, Doctor, Booking, Appointment, Settlement, AuditLog, ...)
+  src/models/        Mongoose models (User, Village, Lab, LabTest, Doctor, Booking,
+                     Appointment, Settlement, AuditLog, FamilyMember)
   src/routes/        auth, public, patient, lab, doctor, agent, admin, files
-  src/services/      pricing, bookings (status machine, OTP), geo, appointments (tokens), settlements, users
-  src/lib/           tokens, crypto, audit, mailer, storage drivers (local | s3 | cloudinary), dates, pagination
+  src/services/      pricing, bookings (status machine, OTP), geo, appointments (tokens),
+                     settlements, users, finance
+  src/lib/           tokens, crypto, audit, mailer, storage drivers (local | s3 | cloudinary),
+                     dates, pagination
   src/jobs/          weekly settlement (node-cron)
   src/scripts/       create-admin, seed:dev, e2e-server
   tests/             Jest + Supertest (auth, RBAC, business rules)
@@ -30,16 +33,21 @@ client/            Web app (npm workspace "nidaansetu-client")
   src/auth/          Session context and role guards
   src/i18n/          hi.json / en.json (Hindi-first, Roman script)
   src/pages/         public, patient, lab, doctor, agent, admin
+mobile/            Flutter app (Riverpod + Dio)
+  lib/core/          dio_client, auth_controller, session_store, api_error
+  lib/models/        users, bookings, appointments, labs, doctors
+  lib/repositories/  auth, public, patient, staff repositories
+  lib/features/      auth, patient, lab_staff, doctor, agent screens
 e2e/               Playwright smoke flows
 archive/           The old SehatDwaar prototype and expo demo files (not built, not linted)
 ```
 
 ## Local setup
 
-Requirements: Node 20+, and MongoDB 6+ (local or Atlas).
+Requirements: Node 20+, and MongoDB 6+ (local or Atlas). Flutter SDK is needed only for the mobile app.
 
 ```bash
-npm install                         # installs both workspaces
+npm install                         # installs all workspaces
 cp server/.env.example server/.env  # edit MONGO_URI if using Atlas
 npm run seed:dev                    # demo data (wipes the DB); refuses when NODE_ENV=production
 npm run dev                         # API on :5050, web on http://localhost:5173
@@ -78,7 +86,36 @@ Seed: 7 Maharajganj-block villages, 2 labs ("Shree" uses the real Siwan rate lis
 ```bash
 docker compose up --build            # web on http://localhost:8080 (nginx proxies /api to the API)
 docker compose exec api npm run create-admin -- --email you@example.com --name "Your Name"
+docker compose down
 ```
+
+## Mobile app (Flutter)
+
+Run these inside `mobile/`:
+
+```bash
+cd mobile
+flutter pub get
+flutter analyze
+flutter test
+
+# Debug run on a USB-connected Android device against the local API
+adb devices
+adb reverse tcp:5050 tcp:5050
+flutter run --dart-define=API_URL=http://localhost:5050
+
+# Release APKs for local USB testing
+flutter build apk --release --split-per-abi --dart-define=API_URL=http://localhost:5050 --dart-define=FLAVOR=prod
+adb install -r build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+
+# Release APKs pointing to a live HTTPS API
+flutter build apk --release --split-per-abi --dart-define=API_URL=https://<your-cloud-api-url> --dart-define=FLAVOR=prod
+```
+
+| Define | Purpose |
+|---|---|
+| `API_URL` | API base URL (`http://localhost:5050` locally, `https://...` for cloud) |
+| `FLAVOR` | `prod` for release builds |
 
 ## Scripts
 
@@ -101,13 +138,14 @@ See `server/.env.example` for the full list.
 | Variable | Notes |
 |---|---|
 | `NODE_ENV` | `production` turns on secure cookies and requires the secrets below |
+| `PORT` | API port, default 5050 |
 | `MONGO_URI` | MongoDB connection string |
 | `CLIENT_ORIGIN` | Allowed web origin(s) for CORS, comma-separated |
 | `PUBLIC_API_URL` | Base URL used in signed report links (local storage driver) |
 | `JWT_ACCESS_SECRET`, `FILE_URL_SECRET`, `OTP_SECRET` | Required in production, min 32 chars each |
 | `ACCESS_TOKEN_TTL_MIN` / `REFRESH_TOKEN_TTL_DAYS` | Default 15 min / 7 days |
 | `BCRYPT_COST` | Default 12; must be ≥ 12 in production |
-| `COOKIE_SAMESITE` | `lax` if web and API share a site; `none` if they're on different domains (needs HTTPS) |
+| `COOKIE_SAMESITE` | `lax` if web and API share a site; `none` if on different domains (needs HTTPS) |
 | `STORAGE_DRIVER` | `local` (dev only), `s3`, or `cloudinary` |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` | S3 settings; credentials via standard AWS env or IAM role |
 | `CLOUDINARY_URL` | `cloudinary://key:secret@cloud` |
@@ -128,7 +166,7 @@ Client: `VITE_API_URL`. Leave it empty when the web app and API share an origin 
 | `patient` | Self sign-up | Own profile, family, test bookings, doctor tokens, own reports |
 
 - `POST /auth/signup` always creates a `patient`. A `role` field in the body is stripped.
-- Accounts made by an agent/admin get a temporary password (emailed and shown once on screen) and `mustChangePassword: true`. Until it is changed, every route except `/auth/me`, `/auth/change-password` and `/auth/logout` returns `403 PASSWORD_CHANGE_REQUIRED`.
+- Accounts made by an agent/admin get a temporary password and `mustChangePassword: true`. Until it is changed, every route except `/auth/me`, `/auth/change-password` and `/auth/logout` returns `403 PASSWORD_CHANGE_REQUIRED`.
 - Disabling a user bumps their token version and revokes refresh tokens, so existing sessions stop working at once.
 - Other people's records return **404**, not 403.
 - Every data-changing action is written to `AuditLog` (actor, action, entity, before/after, IP).
@@ -136,28 +174,28 @@ Client: `VITE_API_URL`. Leave it empty when the web app and API share an origin 
 ## Business rules (enforced on the server)
 
 1. Prices come only from `LabTest` in the DB. The booking API accepts test IDs; any price fields are stripped.
-2. Collection fee is 0 if test total ≥ `freeCollectionAbove`, else `collectionFee`. Orders below `minOrderValue` are rejected: *"Kam se kam ₹199 ki jaanch book karein"*.
+2. Collection fee is 0 if test total ≥ `freeCollectionAbove`, else `collectionFee`. Orders below `minOrderValue` (₹199) are rejected: *"Kam se kam ₹199 ki jaanch book karein"*.
 3. `b2bPrice` = walk-in price × (1 − commission%) unless overridden. `labPayout` = Σ b2bPrice and `platformMargin` = total − labPayout, both stored on the booking.
 4. Labs are listed only if their `serviceRadiusKm` covers the patient's village (`$geoNear`), nearest first, with km.
 5. Status machine: `requested → confirmed → collected → report_ready`, plus `cancelled` from requested/confirmed only.
-6. Collection OTP: 4 digits, shown only to the patient. It is derived from the booking code with `OTP_SECRET` (HMAC); the DB stores only a verification hash. Lab staff must enter it to mark *collected*. 5 wrong tries lock the booking.
+6. Collection OTP: 4 digits, shown only to the patient. Derived from the booking code with `OTP_SECRET` (HMAC); the DB stores only a verification hash. Lab staff must enter it to mark *collected*. 5 wrong tries lock the booking.
 7. Reports: only when *collected*; PDF/JPG/PNG checked by content (magic bytes), max 5 MB; stored privately. `GET /bookings/:id/report` checks access and returns a signed URL valid for 10 minutes. Allowed viewers: the patient, the booking's lab, the referring doctor (with consent) and super admin.
-8. Doctor tokens only on schedule days and within `maxTokens`; token = next number for that doctor/date (a unique index guards races). One active token per person (account holder or family member) per doctor per day.
+8. Doctor tokens only on schedule days and within `maxTokens`; token = next number for that doctor/date (a unique index guards races). One active token per person per doctor per day.
 9. Doctor referrals create a `source: doctor` booking linked to the appointment. The patient sees it in "Meri booking".
 10. Weekly settlement (Monday 06:00 IST): per lab, bookings collected in the previous Mon–Mon week. `netPayable = Σ labPayout − cash kept by the collector`. A negative value means the lab owes the platform. Re-running is idempotent; paid settlements are never changed.
 
 ## API (`/api/v1`)
 
-Errors are always `{ "error": { "code", "message" } }`. Messages are simple Hinglish. List endpoints accept `page`, `limit`, `sort` (e.g. `-createdAt`) and filters, and return `{ data, meta: { page, limit, total, pages } }`.
+Errors are always `{ "error": { "code", "message" } }`. Messages are simple Hinglish. List endpoints accept `page`, `limit`, `sort` (e.g. `-createdAt`) and filters, and return `{ data, meta: { page, limit, total, pages } }`. Health check: `GET /api/health`.
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/signup` · `POST /auth/login` (mobile or email) · `POST /auth/refresh` · `POST /auth/logout` · `POST /auth/change-password` · `POST /auth/forgot-password` · `POST /auth/reset-password` · `GET /auth/me` |
+| Auth | `POST /auth/signup` · `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `POST /auth/change-password` · `POST /auth/forgot-password` · `POST /auth/reset-password` · `GET /auth/me` |
 | Public | `GET /villages` · `GET /labs?villageId=` · `GET /labs/:id/tests` · `GET /doctors?villageId=&specialty=` · `GET /specialties` · `GET /doctors/:id/availability?from=&to=` |
 | Patient | `PATCH /me` · `GET/POST /me/family` · `PATCH/DELETE /me/family/:id` · `POST /bookings` · `GET /me/bookings` · `POST /bookings/:id/cancel` · `GET /bookings/:id/report` · `POST /appointments` · `GET /me/appointments` · `POST /appointments/:id/cancel` |
-| Lab staff | `GET /lab/bookings?status=` · `PATCH /lab/bookings/:id/confirm` · `PATCH /lab/bookings/:id/reject` · `PATCH /lab/bookings/:id/collect` · `POST /lab/bookings/:id/report` · `GET /lab/settlements` · `GET /lab/tests` · `PATCH /lab/tests/:id` |
+| Lab staff | `GET /lab/bookings?status=` · `PATCH /lab/bookings/:id/confirm` · `PATCH /lab/bookings/:id/reject` · `PATCH /lab/bookings/:id/collect` · `POST /lab/bookings/:id/report` · `GET /lab/settlements` · `GET /lab/finance` · `GET /lab/tests` · `PATCH /lab/tests/:id` |
 | Doctor | `GET /doctor/profile` · `GET /doctor/appointments?date=&when=` · `PATCH /doctor/appointments/:id/seen` · `PATCH /doctor/appointments/:id/no-show` · `POST /doctor/referrals` · `GET /doctor/referrals` · `GET/PATCH /doctor/schedule` |
-| Agent | `POST /agent/villages` · `POST /agent/labs` · `GET/PATCH /agent/labs/:id` · `POST /agent/labs/:id/tests` (`text`: "Name = Price" lines or CSV) · `POST /agent/labs/:id/staff` · `POST /agent/doctors` · `PATCH /agent/doctors/:id` · `GET /agent/my-onboarded?type=lab\|doctor` · `GET /agent/bookings` |
+| Agent | `POST /agent/villages` · `POST /agent/labs` · `GET/PATCH /agent/labs/:id` · `POST /agent/labs/:id/tests` ("Name = Price" lines or CSV) · `POST /agent/labs/:id/staff` · `POST /agent/doctors` · `PATCH /agent/doctors/:id` · `GET /agent/my-onboarded?type=lab\|doctor` · `GET /agent/bookings` |
 | Super admin | `GET/POST /admin/users` · `PATCH /admin/users/:id/status` · `POST /admin/users/:id/reset-password` · `GET /admin/labs` · `GET /admin/doctors` · `GET /admin/villages` · `GET /admin/bookings` · `GET /admin/appointments` · `GET /admin/settlements` · `GET /admin/settlements/:id` · `POST /admin/settlements/generate` · `PATCH /admin/settlements/:id/paid` · `GET /admin/stats?days=` · `GET /admin/audit` |
 | Files | `GET /files/:key?exp&sig` (local driver only; HMAC-signed, expiring) |
 
@@ -172,11 +210,12 @@ Errors are always `{ "error": { "code", "message" } }`. Messages are simple Hing
 ## Deploy
 
 1. **Database:** MongoDB Atlas cluster (region close to India, e.g. Mumbai). Create a DB user, allow the API's egress IPs, and copy the connection string.
-2. **API** (Render / Railway / AWS): build from the repo root with `server/Dockerfile`, or run `npm ci -w server && npm start -w server`. Set `NODE_ENV=production`, `MONGO_URI`, the three secrets, `CLIENT_ORIGIN=https://<web domain>`, `PUBLIC_API_URL=https://<api domain>`, `STORAGE_DRIVER=s3` (or `cloudinary`) with its settings, and SMTP. If web and API are on different domains, set `COOKIE_SAMESITE=none`. Health check: `GET /api/health`.
-3. **Web** (Netlify / Vercel / Cloudflare Pages / S3+CloudFront): `npm ci && npm run build -w client` with `VITE_API_URL=https://<api domain>`, publish `client/dist`, and add an SPA fallback to `index.html`. Hosting the web and API under one domain (e.g. `/api` reverse-proxied) avoids third-party cookie problems on some phones; `client/nginx.conf` shows that setup.
-4. Run `npm run create-admin` once against production, log in, and create your field agents.
-5. Settlement runs in the API process every Monday 06:00 IST. Run a **single** API instance, or set `CRON_ENABLED=false` on all but one.
+2. **API** (Render / Railway / AWS): build from the repo root with `server/Dockerfile`, or run `npm ci -w server && npm start -w server`. Set `NODE_ENV=production`, `MONGO_URI`, the three secrets, `CLIENT_ORIGIN=https://<web domain>`, `PUBLIC_API_URL=https://<api domain>`, `STORAGE_DRIVER=s3` (or `cloudinary`) with its settings, and SMTP. If web and API are on different domains, set `COOKIE_SAMESITE=none`.
+3. **Web** (Netlify / Vercel / Cloudflare Pages / S3+CloudFront): `npm ci && npm run build -w client` with `VITE_API_URL=https://<api domain>`, publish `client/dist`, and add an SPA fallback to `index.html`. Hosting web and API under one domain avoids third-party cookie problems on some phones; `client/nginx.conf` shows that setup.
+4. **Mobile:** build release APKs pointing to the live API (see "Mobile app").
+5. Run `npm run create-admin` once against production, log in, and create your field agents.
+6. Settlement runs in the API process every Monday 06:00 IST. Run a **single** API instance, or set `CRON_ENABLED=false` on all but one.
 
 ## Not in this version
 
-Online payment gateway, WhatsApp/SMS, video consult, ambulance, pharmacy, native apps, AI report explainer. Payments (Razorpay) can go in `server/src/services/payments/` and set `payment.mode = "online"` on bookings. WhatsApp Cloud API notifications can subscribe to the booking/appointment actions already written to the audit log (or a small event emitter in `services/bookings.js`), with no changes to the route code.
+Online payment gateway, WhatsApp/SMS, video consult, ambulance, pharmacy, AI report explainer. Payments (Razorpay) can go in `server/src/services/payments/` and set `payment.mode = "online"` on bookings. WhatsApp Cloud API notifications can subscribe to the booking/appointment actions already written to the audit log (or a small event emitter in `services/bookings.js`), with no changes to the route code.
