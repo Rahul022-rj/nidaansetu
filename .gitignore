@@ -16,3 +16,4 @@ server/storage/
 storage/
 test-results/
 .DS_Store
+node_modules
